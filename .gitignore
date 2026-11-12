@@ -1,0 +1,8 @@
+# Ambiente virtual do Python (cada um cria o seu com: python -m venv venv)
+venv/
+__pycache__/
+*.pyc
+
+# Saídas geradas pelo programa
+textos_extraidos/
+colados/
