@@ -37,6 +37,10 @@ from pdf2image import convert_from_path
 
 from extrair_texto import texto_de_imagem, texto_de_pdf, EXTENSOES_IMAGEM, EXTENSAO_PDF
 from gemini_resposta import ler_pagina_com_ia, ErroGemini
+from groq_audio import transcrever, EXTENSOES_AUDIO_VIDEO
+
+# Tudo que o app aceita: imagens, PDF, áudio e vídeo
+EXTENSOES_ACEITAS = EXTENSOES_IMAGEM | {EXTENSAO_PDF} | EXTENSOES_AUDIO_VIDEO
 
 
 def texto_com_ia(arquivo: Path) -> str:
@@ -75,7 +79,7 @@ class Trabalhador(QThread):
 
     def _extrair(self):
         tarefas = []
-        valid_exts = EXTENSOES_IMAGEM | {EXTENSAO_PDF}
+        valid_exts = EXTENSOES_ACEITAS
 
         for item_str in self.itens:
             p = Path(item_str)
@@ -108,7 +112,10 @@ class Trabalhador(QThread):
             self.log.emit(f"Processando: {arq}")
             try:
                 ext = arq.suffix.lower()
-                if self.usar_ia:
+                if ext in EXTENSOES_AUDIO_VIDEO:
+                    # Áudio/vídeo: transcrição pelo Whisper do Groq (precisa de internet)
+                    txt = transcrever(arq, avisar=self.log.emit)
+                elif self.usar_ia:
                     try:
                         txt = texto_com_ia(arq)
                     except ErroGemini as e:
@@ -188,7 +195,8 @@ class JanelaPrincipal(QMainWindow):
         main_layout.addLayout(btn_layout)
 
         # 2. QListWidget com label de ajuda acima
-        label_ajuda = QLabel("Arraste pastas ou arquivos para cá, ou use os botões")
+        label_ajuda = QLabel("Arraste pastas ou arquivos para cá, ou use os botões. "
+                             "Lê imagens, PDFs, áudios e vídeos (áudio e vídeo precisam de internet).")
         main_layout.addWidget(label_ajuda)
 
         self.list_widget = QListWidget()
@@ -265,7 +273,7 @@ class JanelaPrincipal(QMainWindow):
             if item_existente.data(Qt.UserRole) == str(p.resolve()):
                 return
 
-        valid_exts = EXTENSOES_IMAGEM | {EXTENSAO_PDF}
+        valid_exts = EXTENSOES_ACEITAS
 
         if p.is_dir():
             prefixo = "📁 "
@@ -289,7 +297,11 @@ class JanelaPrincipal(QMainWindow):
 
     def adicionar_arquivos(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Selecionar Arquivos", "", "Imagens e PDFs (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp *.gif *.pdf);;Todos os arquivos (*.*)"
+            self, "Selecionar Arquivos", "",
+            "Tudo que o app lê (" + " ".join("*" + e for e in sorted(EXTENSOES_ACEITAS)) + ");;"
+            "Imagens e PDFs (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp *.gif *.pdf);;"
+            "Áudio e vídeo (" + " ".join("*" + e for e in sorted(EXTENSOES_AUDIO_VIDEO)) + ");;"
+            "Todos os arquivos (*.*)"
         )
         for f in files:
             self.adicionar(f)
